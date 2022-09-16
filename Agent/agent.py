@@ -17,7 +17,7 @@ class Agent:
         self._dnn_learning_rate = dnn_learning_rate
         self._num_freq_channel = 4
         self._max_num_unit_packet = 2
-        self._sta_list = list(range(0,8))
+        self._sta_list = list(range(0, 8))
         self._observation = np.zeros(self._num_freq_channel)
 
         self._num_freq_channel_combination = 2 ** self._num_freq_channel - 1
@@ -25,8 +25,8 @@ class Agent:
         self._freq_channel_combination = [np.where(np.flip(np.array(x)))[0].tolist()
                                           for x in itertools.product((0, 1), repeat=self._num_freq_channel)][1:]
 
-        self._actor = MLP(self._num_freq_channel, self._num_action, [128])
-        self._critic = MLP(self._num_freq_channel, 1, [128])
+        self._actor = MLP(self._num_freq_channel, self._num_action, [128, 64])
+        self._critic = MLP(self._num_freq_channel, 1, [128, 64])
 
         self._eps = 1e-25
         self._mse = torch.nn.MSELoss()
@@ -78,7 +78,7 @@ class Agent:
             if observation_dict == 0:
                 return True
             else:
-                reward = self.get_reward(action_dict, observation_dict['observation'])
+                reward = observation_dict['reward']
                 next_observation = self.convert_observation_dict_to_arr(observation_dict['observation'])
 
                 self._observation = torch.Tensor(self._observation)
@@ -144,18 +144,6 @@ class Agent:
                            'num_unit_packet': num_unit_packet}
         return action_dict
 
-    def get_reward(self, action, observation):
-        observation_type = observation['type']
-        reward = 0
-        if observation_type == 'sensing':
-            reward = 0
-        elif observation_type == 'tx_data_packet':
-            num_tx_packet = len(action['sta_allocation_dict'])
-            num_success_packet = len(observation['success_freq_channel'])
-            num_failure_packet = num_tx_packet - num_success_packet
-            reward = num_success_packet * self._unit_packet_success_reward + num_failure_packet * self._unit_packet_failure_reward
-        return reward
-
     def save_model(self):
         save_dict = {
             "Actor": self._actor.state_dict(),
@@ -170,22 +158,22 @@ class Agent:
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, num_neurons: list = [64, 32], hidden_act: str = 'ReLU',
+    def __init__(self, input_size: int, output_size: int, num_neurons: list = [64, 32], hidden_act: str = 'ReLU',
                  out_act: str = 'Identity'):
         super(MLP, self).__init__()
-        self._input_dim = input_dim
-        self._output_dim = output_dim
+        self._input_size = input_size
+        self._output_size = output_size
         self._num_neurons = num_neurons
         self._hidden_act = getattr(nn, hidden_act)()
         self._out_act = getattr(nn, out_act)()
 
-        input_dims = [input_dim] + num_neurons
-        output_dims = num_neurons + [output_dim]
+        input_sizes = [input_size] + self._num_neurons
+        output_sizes = self._num_neurons + [output_size]
 
         self._layers = nn.ModuleList()
-        for i, (in_dim, out_dim) in enumerate(zip(input_dims, output_dims)):
-            is_last = True if i == len(input_dims) - 1 else False
-            self._layers.append(nn.Linear(in_dim, out_dim))
+        for i, (in_size, out_size) in enumerate(zip(input_sizes, output_sizes)):
+            is_last = True if i == len(input_sizes) - 1 else False
+            self._layers.append(nn.Linear(in_size, out_size))
             if is_last:
                 self._layers.append(self._out_act)
             else:
